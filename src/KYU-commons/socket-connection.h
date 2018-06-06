@@ -4,6 +4,7 @@
 #include "../commons/collections/list.h"
 #include "../commons/error.h"
 #include "protocol.h"
+#include "KYU-commons.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,8 +71,6 @@ static const int BACKLOG = 20;
 
 //bool initialized = false;
 
-static void* global_seach_condition;
-static int find_mutex = 0;
 
 
 
@@ -126,7 +125,7 @@ t_SCB *open_server(t_connection_mannager *self, int port, int back_log, process_
  */
 t_SCB *start_server(t_connection_mannager *self);
 
-void stop_server(t_connection_mannager *self);
+//void stop_server(t_connection_mannager *self);
 
 
 /*

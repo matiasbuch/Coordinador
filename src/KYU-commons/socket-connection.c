@@ -8,6 +8,11 @@
 		FD_ZERO(fd_set *set); Clear all entries from the set.
 	 */
 
+
+static void* global_seach_condition;
+static int find_mutex = 0;
+
+
 /*
  * 	METODOS PRIVADOS
  *
@@ -21,7 +26,7 @@
 static void _sigchld_handler(int s);
 
 
-static void _destroy_socket(t_SCB *socket);
+static void _destroy_connection(t_SCB *connection);
 
 
 static bool _find_by_socket_fd(void* socket);
@@ -54,8 +59,14 @@ static void _sigchld_handler(int s) {
 }
 
 
-static void _destroy_socket(t_SCB *socket) {
-	free(socket->host);
+static void _destroy_connection(t_SCB *connection) {
+	if (connection == NULL)
+		return;
+
+	if (connection->connected)
+		error_show("Warning - Esta destruyendo un socket que no ha sido desconectado. Host:[%s] Port:[%d] Type:[%d]", connection->host, connection->port, connection->type);
+
+	free(connection->host);
 }
 
 
@@ -84,7 +95,6 @@ t_connection_mannager *create_conn_mngr(int max_data_size) {
 
 	self->max_fd = -1;
 	self->max_data_size = max_data_size;
-	//FD_ZERO(&master_set);s
 	FD_ZERO(&(self->master_set));
 	self->remotes = list_create();
 
@@ -104,16 +114,16 @@ void destroy_conn_mngr(t_connection_mannager *self) {
 	disconnect_all(self);
 
 	for (int i = 0; i < ((t_list *)(self->remotes))->elements_count -1; i++) {
-		_destroy_socket(list_get(self->remotes, i));
+		_destroy_connection(list_get(self->remotes, i));
 	}
 	list_destroy(self->remotes);
 
 	for (int i = 0; i < ((t_list *)self->remotes)->elements_count -1; i++) {
-			_destroy_socket(list_get(self->clients, i));
+			_destroy_connection(list_get(self->clients, i));
 	}
 	list_destroy(self->clients);
 
-	_destroy_socket(self->server);
+	_destroy_connection(self->server);
 	free(&(self->master_set));
 	free(self);
 };
@@ -153,6 +163,7 @@ t_SCB *connect_remote(t_connection_mannager *self, char *host, int port) {
 	if ((rv = getaddrinfo(client->host, strPort, &hints, &servinfo)) != 0) {
 	//if ((rv = getaddrinfo(client->host, "1", &hints, &servinfo)) != 0) {
 		error_show("getaddrinfo: %s\n", gai_strerror(rv));
+
 		//freeaddrinfo(servinfo); ???
 		return client;
 	}
@@ -189,7 +200,6 @@ t_SCB *connect_remote(t_connection_mannager *self, char *host, int port) {
 		self->max_fd = sockfd;
 		list_add(self->clients, client);
 		FD_SET(sockfd, &(self->master_set));
-		//FD_SET(sockfd, &master_set);
 
 		// log
 		inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof s);
@@ -251,7 +261,7 @@ t_SCB *open_server(t_connection_mannager *self, int port, int back_log, process_
 			error_show("Puerto:[%d] de conexion establecido para socket:[%d]\n", socket_fd, port);
 		}
 
-		// lose the pesky "address already in use" error message
+		// TODO: lose the pesky "address already in use" error message
 		//setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
 		if (bind(socket_fd, p->ai_addr, p->ai_addrlen) < 0) {
 			close(socket_fd);
@@ -514,6 +524,16 @@ static bool _find_by_pid(void* connection) {
 */
 
 void disconnect(t_connection_mannager *self, t_SCB *connection) {
+	if ((self == NULL) || (connection == NULL)) {
+		error_show("Conexion nula. No se puede desconectar");
+		return;
+	}
+
+	if (!connection->connected) {
+		error_show("El socket ya esta desconectado. Host:[%s] Port:[%d] Tipo:[%d]", connection->socket_fd, connection->host, connection->port, connection->type);
+		return;
+	}
+
 	while (find_mutex)
 		sleep(200);
 
@@ -521,20 +541,34 @@ void disconnect(t_connection_mannager *self, t_SCB *connection) {
 	global_seach_condition = &(connection->socket_fd);
 
 
-	if (connection->type == CLIENT) {
+	switch (connection->type) {
+	case CLIENT:
 		list_remove_by_condition(self->clients, _find_by_socket_fd);
-	}
-	else if (connection->type == REMOTE) {
+		break;
+	case REMOTE:
 		list_remove_by_condition(self->remotes, _find_by_socket_fd);
+		break;
+	case SERVER:
+		break;
 	}
+
 	find_mutex = 0;
 
-	close(connection->socket_fd);
-	connection->connected = false;
-	FD_CLR(connection->socket_fd, &(self->master_set));
+	int result = close(connection->socket_fd);
+	if (result != 0) result = errno;
+
+	if (result == 0) {
+		printf(string_from_format("Socket fd:[%d] desconectado. Host:[%s] Port:[%d] Tipo:[%d]", connection->socket_fd, connection->host, connection->port, connection->type));
+		connection->connected = false;
+		FD_CLR(connection->socket_fd, &(self->master_set));
+	}
+	else {
+		error_show("No se pudo cerrar la conexion del Socket fd:[%d] desconectado. Host:[%s] Port:[%d] Tipo:[%d]", connection->socket_fd, connection->host, connection->port, connection->type);
+	}
 }
 
 
+/*
 void stop_server(t_connection_mannager *self) {
 	if (self->server->connected) {
 		close(self->server->socket_fd);
@@ -542,7 +576,7 @@ void stop_server(t_connection_mannager *self) {
 		self->server->connected = false;
 	}
 }
-
+*/
 
 int disconnect_all(t_connection_mannager *self) {
 	/* TODO
@@ -567,7 +601,7 @@ int disconnect_all(t_connection_mannager *self) {
 		}
 	}
 
-	stop_server(self);
+	disconnect(self, self->server);
 	FD_ZERO(&(self->master_set));
 
 	return 0;

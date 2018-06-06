@@ -109,7 +109,7 @@ void coordinador_destroy(t_coordinador *self) {
 
 	// Cierro todas las conexiones
 	// TODO
-	//disconnect_all(self->conn_mngr);
+	disconnect_all(self->conn_mngr);
 	coordinador_config_destroy(self->config);
 	free(self);
 }
@@ -183,17 +183,17 @@ int process_sentence(t_coordinador *self, sys_sentence_t *sentence) {
 int main(int argc, char *argv[]) {
 
 	//char* path = "/home/utnso/git/Coordinador/resources/config.cfg";
-	printf("Inicio Coordinador\n");
+	show(LOG_LEVEL_INFO, "Inicio Coordinador\n");
 
 	if (argc < 2) {
 		error_show("Se esperaba como parametro el path del archivo de configuracion\n");
-		return -1;
+		exit(1);
 	}
 
 	t_coordinador * self = coordinador_create(argv[1]);
 
 	if (self == NULL) {
-		exit(1);
+		goto exception;
 	}
 
 	// Pongo a escichar al servidor
@@ -201,15 +201,15 @@ int main(int argc, char *argv[]) {
 
 	if (!self->conn_mngr->server->connected) {
 		error_show("Erro al abrir el puerto servidor de conexiones. Puerto:[%d]", self->conn_mngr->server->port);
-		destroy_coordinador(self);
-		return NULL;
+		coordinador_destroy(self);
+		goto exception;
 	}
 
 	//coordinador_run(self);
 
 exception:
 	coordinador_destroy(self);
-	return NULL;
+	exit(1);
 }
 
 

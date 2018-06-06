@@ -18,6 +18,7 @@
 #include "commons/string.h"
 
 #include "KYU-commons/socket-connection.h"
+#include "KYU-commons/KYU-commons.h"
 
 
 #include <stdlib.h>

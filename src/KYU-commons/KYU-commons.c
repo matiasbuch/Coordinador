@@ -10,6 +10,48 @@
  	 /usr/include
  */
 
+static t_log * log;
+
+
+void show(t_log_level level, const char* message, ...) {
+
+	char * strLevel = log_level_as_string(level);
+
+	va_list arguments;
+	va_start(arguments, message);
+	char * msg = string_from_format("[%s]=>%s", strLevel, message);
+	char * print = string_from_format(msg, arguments);
+	printf(print);
+	va_end(arguments);
+
+
+	if (log != NULL) {
+		switch(level) {
+		case LOG_LEVEL_TRACE:
+			log_trace(message, arguments);
+			break;
+		case LOG_LEVEL_DEBUG:
+			log_debug(message, arguments);
+			break;
+		case LOG_LEVEL_INFO:
+			log_info(message, arguments);
+			break;
+		case LOG_LEVEL_WARNING:
+			log_warning(message, arguments);
+			break;
+		case LOG_LEVEL_ERROR:
+			log_error(message, arguments);
+			break;
+		}
+	}
+
+	free(arguments);
+	free(print);
+	free(msg);
+	free(strLevel);
+
+}
+
 
 
 char *read_line(FILE *file, int *readed) {
